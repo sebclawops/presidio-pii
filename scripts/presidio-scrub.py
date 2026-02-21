@@ -54,6 +54,19 @@ def main():
     if len(entities) == 0:
         print(json.dumps({"text": text, "pii_found": 0, "mapping_file": None, "session_id": session_id}, indent=2)); return
 
+    # Remove overlapping entities (keep highest score, then longest match)
+    entities_by_score = sorted(entities, key=lambda x: (-x.get("score", 0), -(x["end"] - x["start"])))
+    filtered = []
+    for ent in entities_by_score:
+        overlap = False
+        for kept in filtered:
+            if ent["start"] < kept["end"] and ent["end"] > kept["start"]:
+                overlap = True
+                break
+        if not overlap:
+            filtered.append(ent)
+    entities = filtered
+
     # Build tokens
     entities_fwd = sorted(entities, key=lambda x: x["start"])
     type_counters, token_map, reverse_map = {}, {}, {}
