@@ -34,8 +34,13 @@ The skill includes a configs/recognizers.json where you can add patterns specifi
 - City/region name boosting (for when spaCy misses local city names)
 - Vessel/vehicle name patterns
 - Project ID patterns that contain customer names
+- **WhatsApp JID exclusion** (prevents @g.us and @s.whatsapp.net from being detected as emails)
 
 Edit the JSON file, no container restart needed. Recognizers are passed with each API call.
+
+### WhatsApp JID Protection
+
+By default, Presidio's email recognizer detects `@g.us` in WhatsApp group IDs (e.g., `120363426280179487@g.us`) as email addresses. This skill includes a whitelist recognizer that prevents this false positive. The recognizer matches WhatsApp JIDs with a score of 0.0, effectively excluding them from PII detection.
 
 ## Prerequisites
 

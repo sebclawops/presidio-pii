@@ -1,6 +1,23 @@
 {
   "ad_hoc_recognizers": [
     {
+      "name": "WhatsAppJID",
+      "supported_language": "en",
+      "patterns": [
+        {
+          "name": "whatsapp_group_id",
+          "regex": "\\d+@g\\.us",
+          "score": 0.0
+        },
+        {
+          "name": "whatsapp_user_id",
+          "regex": "\\d+@s\\.whatsapp\\.net",
+          "score": 0.0
+        }
+      ],
+      "supported_entity": "WHATSAPP_JID"
+    },
+    {
       "name": "SouthFloridaCities",
       "supported_language": "en",
       "patterns": [
