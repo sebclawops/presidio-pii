@@ -18,8 +18,9 @@ def http_post(url, data):
         return None
 
 def check_health():
+    anonymizer_url = os.environ.get("PRESIDIO_ANONYMIZER_URL", "http://localhost:5001")
     a = http_post(f"{ANALYZER_URL}/analyze", {"text": "health", "language": "en"}) is not None
-    b = http_post(os.environ.get("PRESIDIO_ANONYMIZER_URL", "http://localhost:5001") + "/anonymize",
+    b = http_post(f"{anonymizer_url}/anonymize",
         {"text": "h", "anonymizers": {"DEFAULT": {"type": "replace", "new_value": "x"}}, "analyzer_results": []}) is not None
     return a, b
 
@@ -35,7 +36,12 @@ def main():
     # Health check
     a_ok, b_ok = check_health()
     if not a_ok or not b_ok:
-        print(json.dumps({"error": "BLOCKED: Presidio is not healthy.", "analyzer": "up" if a_ok else "DOWN", "anonymizer": "up" if b_ok else "DOWN"}))
+        print(json.dumps({
+            "error": "BLOCKED: Presidio is not healthy.",
+            "message": "Customer data cannot be processed unprotected.",
+            "analyzer": "up" if a_ok else "DOWN",
+            "anonymizer": "up" if b_ok else "DOWN"
+        }))
         sys.exit(1)
 
     # Load custom recognizers
@@ -51,6 +57,26 @@ def main():
     entities = http_post(f"{ANALYZER_URL}/analyze", payload)
     if entities is None:
         print(json.dumps({"error": "Analyzer returned no response"})); sys.exit(1)
+
+    # Drop noisy entity types and weak detections before overlap handling
+    blocked_entity_types = {"URL"}
+    min_scores = {
+        "PERSON": 0.88,
+        "LOCATION": 0.80,
+        "PHONE_NUMBER": 0.70,
+        "EMAIL_ADDRESS": 0.70
+    }
+    filtered_entities = []
+    for ent in entities:
+        etype = ent.get("entity_type")
+        score = ent.get("score", 0)
+        if etype in blocked_entity_types:
+            continue
+        if etype in min_scores and score < min_scores[etype]:
+            continue
+        filtered_entities.append(ent)
+    entities = filtered_entities
+
     if len(entities) == 0:
         print(json.dumps({"text": text, "pii_found": 0, "mapping_file": None, "session_id": session_id}, indent=2)); return
 
@@ -66,12 +92,6 @@ def main():
         if not overlap:
             filtered.append(ent)
     entities = filtered
-
-    # Whitelist: exclude WhatsApp JIDs from PII detection
-    WHATSAPP_SUFFIXES = ("@g.us", "@s.whatsapp.net", "@lid", "@broadcast")
-    entities = [e for e in entities if not any(text[e["start"]:e["end"]].endswith(suffix) for suffix in WHATSAPP_SUFFIXES)]
-    if len(entities) == 0:
-        print(json.dumps({"text": text, "pii_found": 0, "mapping_file": None, "session_id": session_id}, indent=2)); return
 
     # Build tokens
     entities_fwd = sorted(entities, key=lambda x: x["start"])

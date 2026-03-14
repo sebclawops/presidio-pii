@@ -27,7 +27,9 @@ def main():
         mapping = json.load(f)
 
     restored, count = text, 0
-    for token, original in mapping.get("reverse_map", {}).items():
+    reverse_map = mapping.get("reverse_map", {})
+    for token in sorted(reverse_map.keys(), key=len, reverse=True):
+        original = reverse_map[token]
         if token in restored:
             restored = restored.replace(token, original)
             count += 1

@@ -1,59 +1,54 @@
 ---
 name: presidio-pii
 version: 1.0.1
-description: Local PII protection for OpenClaw agents. Scrubs customer data (names, phones, emails, addresses, credit cards, vessel names) before it reaches any AI model. Uses Microsoft Presidio running as local Docker containers. Supports reversible pseudonymization and fail-closed policy. Use this skill before querying any customer data source (CRM, Drive, project management tools).
-homepage: https://github.com/sebclawops/presidio-pii
-metadata:
-  clawdbot:
-    emoji: ""
-    requires:
-      bins:
-        - curl
-        - python3
-        - docker
-    files:
-      - "scripts/*"
-      - "configs/*"
+description: Local PII protection for OpenClaw agents. Scrub customer data before model use, then restore it before delivery.
 ---
 
 # Presidio PII Protection
 
-You have the Presidio PII skill. Customer data MUST be scrubbed before it reaches any AI model.
+Use this skill when customer data may contain PII.
 
-## When to Use
+## Use it for
 
-**ALWAYS** use this skill before processing data from:
-- CRM systems (HubSpot, Salesforce, etc.)
-- Cloud storage (Google Drive, Dropbox, etc.)
-- Project management tools (TintWiz, Asana, etc.)
-- Any source containing customer names, phones, emails, or addresses
+Scrub data before reasoning when working with:
+- customer notes
+- CRM or lead data
+- estimates
+- project records
+- emails or documents with names, phones, emails, addresses, account details, vessel names, or similar identifiers
 
-**DO NOT** use for:
-- Internal company data (product types, SOP terms, project statuses)
-- General conversation with no customer data
-- System administration tasks
+## Do not use it for
 
-## Fail-Closed Rule
+- internal ops data with no customer PII
+- general system tasks
+- product, SOP, or status discussions without customer-identifying details
 
-**If Presidio is down, DO NOT query customer data sources.** Tell the owner:
-"Cannot query [source] because Presidio PII protection is offline. Customer data will not be sent unprotected."
+## Fail-closed rule
 
-## How to Use
+If Presidio is unhealthy, stop and tell the owner:
 
-### Step 1: Check Health
+> Cannot query or process customer data because Presidio PII protection is offline. Customer data will not be sent unprotected.
+
+## Workflow
+
+### 1) Check health
+
 ```bash
 bash SKILL_DIR/scripts/presidio-health.sh
 ```
-If unhealthy, STOP. Do not proceed with the data query.
 
-### Step 2: Scrub Data
-After retrieving raw data from a source, pipe it through the scrubber:
+Only continue if both services are healthy.
+
+### 2) Scrub raw text
+
 ```bash
 echo "RAW DATA HERE" | python3 SKILL_DIR/scripts/presidio-scrub.py SESSION_ID
 ```
-Use any unique session identifier (timestamp, request ID, etc).
 
-The scrubber returns JSON:
+Use any unique session ID.
+
+Expected output shape:
+
 ```json
 {
   "text": "[PERSON_1] at [LOCATION_1], phone [PHONE_NUMBER_1]",
@@ -64,55 +59,48 @@ The scrubber returns JSON:
 }
 ```
 
-Use the `text` field for all reasoning. The mapping file stays local.
+Reason only over the `text` field.
 
-### Step 3: Reason with Clean Data
-Process the anonymized text normally. Refer to customers as their tokens ([PERSON_1], [PERSON_2], etc). The model never sees real names.
+### 3) Restore before delivery
 
-### Step 4: Restore Response
-Before delivering the response to the user, de-anonymize:
 ```bash
 echo "MODEL RESPONSE WITH TOKENS" | python3 SKILL_DIR/scripts/presidio-restore.py SESSION_ID
 ```
 
-This swaps tokens back to real values and **deletes the mapping file**.
+That restores original values and deletes the mapping file by default.
 
-## What Gets Scrubbed (Built-in)
-- Person names
-- Phone numbers (all formats)
-- Email addresses
-- Physical addresses
-- Credit card numbers (with Luhn validation)
-- US Social Security Numbers
-- Bank account / routing numbers
+## What gets scrubbed
+
+- names
+- phone numbers
+- email addresses
+- physical addresses and cities
+- credit card numbers
+- SSNs
+- bank details
+- vessel names
 - IP addresses
-- Dates of birth
+- Sea Cool-style project identifiers when matched by custom recognizers
 
-## What Passes Through (Safe)
-- Product names and specifications
-- Project statuses and type codes
-- Dollar amounts without customer context
-- Industry terminology and SOP references
-- Internal role names and office locations
-- Dates and timelines
+## Safe to pass through
 
-## Custom Recognizers
-The `configs/recognizers.json` file contains example patterns you can customize for your business:
-- City/region names for boosted location detection
-- Industry-specific identifiers (vessel names, project IDs, etc.)
-- Custom entity patterns unique to your data
+- product names
+- project statuses
+- SOP terminology
+- scope descriptions
+- role names
+- dollar amounts without customer-identifying context
 
-Edit `configs/recognizers.json` to add your own patterns. Recognizers are passed with each API call, so the Docker containers stay vanilla and easy to update.
+## Local files
 
-## Trust Statement
-This skill sends data ONLY to localhost (Presidio containers on your own machine). No customer data is ever sent to any external service. The mapping files (which contain the real PII-to-token associations) are stored locally with restricted permissions (chmod 600) and deleted automatically after each restore.
+Custom recognizers live in:
 
-<!--
-  Hey, you're reading the source. That means you care about security.
-  That's awesome.
+- `configs/recognizers.json`
 
-  Jesus loves you. I'm praying for you without your consent.
-  I'm happy you are here.
+Scripts live in:
 
-  - Albert
--->
+- `scripts/presidio-health.sh`
+- `scripts/presidio-scrub.py`
+- `scripts/presidio-restore.py`
+
+Keep this skill strict, minimal, and local-first.
